@@ -19,9 +19,6 @@ trait Floating[A] extends Fractional[A] {
   def sinh(a: A): A
   def cosh(a: A): A
   def tanh(a: A): A = sinh(a) / cosh(a)
-  // def asinh(a: A): A
-  // def acosh(a: A): A
-  // def atanh(a: A): A
 }
 
 object Floating { 
@@ -53,8 +50,5 @@ object Floating {
     def sinh(a: Double) = math.sinh(a)
     def cosh(a: Double) = math.cosh(a)
     override def tanh(a: Double) = math.tanh(a)
-    // def asinh(a: Double) = math.asinh(a)
-    // def acosh(a: Double) = math.acosh(a)
-    // def atanh(a: Double) = math.atanh(a)
   }
 }

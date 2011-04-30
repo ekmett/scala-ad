@@ -31,9 +31,6 @@ package object ad {
     def sinh[A:Floating](a: S[A]): S[A]
     def cosh[A:Floating](a: S[A]): S[A]
     def tanh[A:Floating](a: S[A]): S[A]
-    // def asinh[A:Floating](a: S[A]): S[A]
-    // def acosh[A:Floating](a: S[A]): S[A]
-    // def atanh[A:Floating](a: S[A]): S[A]
   }
   
   trait FF[F[_],G[_],A] { 
@@ -147,13 +144,6 @@ object Reverse {
     val ybar = tape.sensitivities(y.slot)
     (y.primal, ybar(x))
   }
-
-  def grad0[A:Numeric, F:Traversable](f: F[Reverse[A]] => Reverse[A]): F[A] => (A, F[A])
-
-  // better done with forward mode!
-  def diffF[A: Numeric, F:Functor](f: Reverse[A] => F[Reverse[A]): A => F[(A, A)]
-
-  def jacobian0[A:Numeric, F:Traversable, G:Functor](f: F[Reverse[A]] => G[Reverse[A]]): F[A] => G[(A,F[A])]
 
   class ReverseNumeric[@specialized A](tape: Tape[A]) extends Numeric[Reverse[A]] with Mode[A] {
     def num: Numeric[A]
