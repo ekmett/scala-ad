@@ -1,54 +1,71 @@
 package ad
 
-case class Forward[A](primal: A, tangent: A) 
+import scalaz._
+import scalaz.Scalaz._
 
-object Forward { 
-  implicit def ForwardMode[A] : Mode[Forward, A] = new Mode[Forward, A] {
-    def compare(a: Forward[A], b: Forward[A])(implicit A: Numeric[A]) = A.compare(a.primal, b.primal)
+case class Forward[+A](primal: A, tangent: A) 
 
-    def plus(a: Forward[A], b: Forward[A])(implicit A: Numeric[A]) = 
-      Forward[A](A.plus(a.primal,b.primal), A.plus(a.tangent,b.tangent))
+object Forward extends ModeCompanion { 
+  implicit def ForwardMode[A](implicit A0: Numeric[A]) : Mode[Forward, A] = new Jacobian[Forward, Id, A] {
+    val A = A0
 
-    def minus(a: Forward[A], b: Forward[A])(implicit A: Numeric[A]) = 
-      Forward[A](A.minus(a.primal,b.primal), A.minus(a.tangent, b.tangent))
+    def lift(a: A) = Forward[A](a, A.zero)
 
-    def times(a: Forward[A], b: Forward[A])(implicit A: Numeric[A]) = 
-      Forward[A](A.times(a.primal,b.primal), A.plus(A.times(a.primal,b.tangent), A.times(a.tangent,b.primal)))
+/*
+    def times(
+      a: Forward[A], 
+      b: Forward[A]
+    ) : Forward[A] = new Forward[A]( 
+      A.times(a.primal, b.primal), 
+      A.plus(A.times(a.primal, b.tangent), A.times(a.tangent, b.primal))
+    )
+*/ 
 
-    def lift(a: A)(implicit A: Numeric[A]) = Forward[A](a, A.zero)
+    def D : Mode[Id, A] = Mode.IdMode[A](A)
+ 
+    def primal(a: Forward[A]): A = a.primal
 
-    def recip(a: Forward[A])(implicit A: Fractional[A]) = { 
-      val ooa = A.div(A.one, a.primal)
-      Forward[A](ooa, A.negate(A.times(ooa, ooa)))
+    def unary(f: A => A, dadb : => A, b: Forward[A]) = Forward[A](f(b.primal), A.times(dadb, b.tangent))
+
+    def lift1(f : A => A, df: A => A, b: Forward[A]) = {
+      val Forward(pb, db) = b
+      val dadb = df(pb)
+      Forward[A](f(pb), A.times(dadb, db))
     }
 
-    def negate(a: Forward[A])(implicit A: Numeric[A]) =
-      Forward[A](A.negate(a.primal), A.negate(a.tangent))
-
-    def todo = error("todo")
-
-    def abs(a: Forward[A])(implicit A: Numeric[A]) = {
-      if (A.compare(a.primal,A.zero) == -1) negate(a)
-      else a
+    def lift1_(f: A => A, df: (A,A) => A, b: Forward[A]): Forward[A] = { 
+      val Forward(pb, db) = b
+      val a = f(pb)
+      Forward[A](a, A.times(df(a, pb), db))
     }
 
-    def signum(a: Forward[A])(implicit A: Numeric[A]) = A.signum(a.primal)
-    def toLong(a: Forward[A])(implicit A: Numeric[A]) = A.toLong(a.primal)
-    def toInt(a: Forward[A])(implicit A: Numeric[A]) = A.toInt(a.primal)
+    def binary(f: (A,A) => A, dadb: => A, dadc: => A, b: Forward[A], c: Forward[A]): Forward[A] =
+      Forward[A](f(b.primal,c.primal), A.plus(A.times(dadb,b.tangent), A.times(dadc,c.tangent)))
 
-    def exp(a: Forward[A])(implicit A: Floating[A]): Forward[A] = todo
-    def log(a: Forward[A])(implicit A: Floating[A]): Forward[A] = todo
+    def lift2 (f: (A,A) => A, df: (A,A) => (A,A), b: Forward[A], c: Forward[A]): Forward[A] = { 
+      val Forward(pb, db) = b
+      val Forward(pc, dc) = c
+      val a = f(pb,pc)
+      val (dadb, dadc) = df(pb, pc)
+      Forward[A](a, A.plus(A.times(dadb,db),A.times(dc,dadc)))
+    }
 
-    def sin(a: Forward[A])(implicit A: Floating[A]) = Forward(A.sin(a.primal), A.cos(a.tangent))
-    def cos(a: Forward[A])(implicit A: Floating[A]) = Forward(A.cos(a.primal), A.negate(A.sin(a.tangent)))
-    override def tan(a: Forward[A])(implicit A: Floating[A]): Forward[A] = todo
+    def lift2_(f: (A,A) => A, df: (A,A,A) => (A,A), b: Forward[A], c: Forward[A]): Forward[A] = { 
+      val Forward(pb, db) = b
+      val Forward(pc, dc) = c
+      val a = f(pb,pc)
+      val (dadb, dadc) = df(a, pb, pc)
+      Forward[A](a, A.plus(A.times(dadb, db),A.times(dc,dadc)))
+    }
 
-    def sinh(a: Forward[A])(implicit A: Floating[A]): Forward[A] = todo
-    def cosh(a: Forward[A])(implicit A: Floating[A]): Forward[A] = todo
-    override def tanh(a: Forward[A])(implicit A: Floating[A]): Forward[A] = todo
+    def vdiv(a: Forward[A], b: A)(implicit A: Fractional[A]): Forward[A] =
+      Forward[A](A.div(a.primal, b), A.div(a.tangent, b))
+    def vtimes(a: Forward[A], b: A): Forward[A] =  
+      Forward[A](A.times(a.primal, b), A.times(a.tangent, b))
+  }
 
-    def asin(a: Forward[A])(implicit A: Floating[A]): Forward[A] = todo
-    def acos(a: Forward[A])(implicit A: Floating[A]): Forward[A] = todo
-    def atan(a: Forward[A])(implicit A: Floating[A]): Forward[A] = todo
+  def diffa[A](f: UU[A])(implicit A: Numeric[A]) = (x: A) => { 
+    val Forward(y, dy) = f(AD(Forward[A](x, A.one))).guts
+    (y, dy)
   }
 }

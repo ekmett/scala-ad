@@ -4,17 +4,21 @@ import scala.collection.mutable.Buffer
 import scalaz._
 import scalaz.Scalaz._
 
-private [ad] case class Reverse[A](primal: A, slot: Int)
+case class Reverse[+A](primal: A, slot: Int)
 
-object Reverse { 
+object Reverse extends ModeCompanion { 
   private [ad] trait Entry[+A] 
   private [ad] case object Zero extends Entry[Nothing]
   private [ad] case object Var extends Entry[Nothing]
-  private [ad] case class Unary[A](di: A, i: Int) extends Entry[A]
-  private [ad] case class Binary[A](di: A, i: Int, dj: A, j: Int) extends Entry[A]
+  private [ad] case class Unary[+A](di: A, i: Int) extends Entry[A]
+  private [ad] case class Binary[+A](di: A, i: Int, dj: A, j: Int) extends Entry[A]
 
   // TODO: the problem here is the A argument to Tape, we need to coerce all of other arguments to make this happy
-  private[ad] class Tape[A] extends Mode[Reverse, A] {
+  private[ad] class Tape[A](implicit val A: Numeric[A]) extends Jacobian[Reverse, Id, A] { 
+    val D : Mode[Id, A] = Mode.IdMode[A]
+
+    def lift(a: A) = Reverse[A](a, 0)
+    def primal(a: Reverse[A]): A = a.primal
     val buffer = Buffer[Entry[A]](Zero)
     def pushSlot(e: Entry[A]) : Int = synchronized { 
       val len = buffer.length
@@ -22,29 +26,13 @@ object Reverse {
       len
     }
     def push(a: A, e: Entry[A]): Reverse[A] = Reverse[A](a, pushSlot(e))
-
     def fresh(a: A): Reverse[A] = push(a, Var)
 
-    def unary(f: A => A, dadb : => A, b: Reverse[A])(implicit A: Numeric[A]) = 
-      Reverse[A]( f(b.primal), 
-        if (b.slot == 0) 0 
-        else pushSlot(Unary[A](dadb, b.slot))
-      )
+    def vtimes(a: Reverse[A], b: A): Reverse[A] = unary(A.times(_, b), D.lift(b), a)
+    def vdiv(a: Reverse[A], b: A)(implicit A: Fractional[A]): Reverse[A] = unary(A.div(_, b), D.lift(A.div(A.one, b)), a)
 
-    def binary(f: (A, A) => A, dadb: => A, dadc: => A, b: Reverse[A], c: Reverse[A])(implicit A: Numeric[A]) = 
-      Reverse[A]( f(b.primal,c.primal), 
-        if (b.slot == 0) {
-          if (c.slot == 0) 0
-          else pushSlot(Unary[A](dadc, c.slot))
-        } else {
-          if (c.slot == 0) pushSlot(Unary[A](dadb, b.slot))
-          else pushSlot(Binary[A](dadb, b.slot, dadc, c.slot))
-        }
-      )
-
-    def sensitivities(top : Int)(implicit man: Manifest[A], A: Numeric[A]): Reverse[A] => A = { 
-      var result = Array.tabulate[A](top + 1)(n => if (n == top) A.one else A.zero)
-      // now iterate backwards across the tape
+    def sensitivities(top : Int): Reverse[A] => A = { 
+      var result = Buffer.tabulate[A](top + 1)(n => if (n == top) A.one else A.zero)
       top max 1 to 1 by -1 foreach { 
         n => buffer(n) match { 
           case Zero => ()
@@ -58,46 +46,45 @@ object Reverse {
       }
       (x : Reverse[A]) => result(x.slot)
     }
-    def minus_one(implicit A: Numeric[A]) = A.negate(A.one)
 
-    def plus(a: Reverse[A], b: Reverse[A])(implicit A: Numeric[A]): Reverse[A]  = todo // binary(A.plus(_,_),A.one,A.one,a,b)
-    def times(a: Reverse[A], b: Reverse[A])(implicit A: Numeric[A]): Reverse[A] = todo // binary(A.times(_,_),b.primal,a.primal,a,b)
-    def minus(a: Reverse[A], b: Reverse[A])(implicit A: Numeric[A]): Reverse[A] = todo // binary(A.minus(_,_),A.one,minus_one,a,b)
+    def unary(f: A => A, dadb : => A, b: Reverse[A]) = 
+      Reverse[A]( f(b.primal), 
+        if (b.slot == 0) 0 
+        else pushSlot(Unary[A](dadb, b.slot))
+      )
 
-    def todo = error("todo")
-    def compare(a: Reverse[A], b: Reverse[A])(implicit A: Numeric[A]) = A.compare(a.primal, b.primal)
-
-    def lift(a: A)(implicit A: Numeric[A]) = Reverse[A](a, 0)
-
-    def recip(a: Reverse[A])(implicit A: Fractional[A]) = todo
-    def negate(a: Reverse[A])(implicit A: Numeric[A]) = todo
-    def abs(a: Reverse[A])(implicit A: Numeric[A]) = {
-      if (A.compare(a.primal,A.zero) == -1) negate(a)
-      else a
+    def lift1(f : A => A, df: A => A, b: Reverse[A]): Reverse[A] = unary(f, df(b.primal), b)
+    def lift1_(f: A => A, df: (A,A) => A, b: Reverse[A]): Reverse[A] = {
+      val pb = b.primal
+      val a = f(pb)
+      unary(_ => a, df(a,pb), b)
     }
 
-    def signum(a: Reverse[A])(implicit A: Numeric[A]) = A.signum(a.primal)
-    def toLong(a: Reverse[A])(implicit A: Numeric[A]) = A.toLong(a.primal)
-
-    def toInt(a: Reverse[A])(implicit A: Numeric[A]) = todo
-
-    def exp(a: Reverse[A])(implicit A: Floating[A]): Reverse[A] = todo
-    def log(a: Reverse[A])(implicit A: Floating[A]): Reverse[A] = todo
-
-    def sin(a: Reverse[A])(implicit A: Floating[A]): Reverse[A] = todo
-    def cos(a: Reverse[A])(implicit A: Floating[A]): Reverse[A] = todo
-    override def tan(a: Reverse[A])(implicit A: Floating[A]): Reverse[A] = todo
-
-    def sinh(a: Reverse[A])(implicit A: Floating[A]): Reverse[A] = todo
-    def cosh(a: Reverse[A])(implicit A: Floating[A]): Reverse[A] = todo
-    override def tanh(a: Reverse[A])(implicit A: Floating[A]): Reverse[A] = todo
-
-    def asin(a: Reverse[A])(implicit A: Floating[A]): Reverse[A] = todo
-    def acos(a: Reverse[A])(implicit A: Floating[A]): Reverse[A] = todo
-    def atan(a: Reverse[A])(implicit A: Floating[A]): Reverse[A] = todo
+    def binary(f: (A, A) => A, dadb: => A, dadc: => A, b: Reverse[A], c: Reverse[A]) = 
+      Reverse[A]( f(b.primal,c.primal), 
+        if (b.slot == 0) {
+          if (c.slot == 0) 0
+          else pushSlot(Unary[A](dadc, c.slot))
+        } else {
+          if (c.slot == 0) pushSlot(Unary[A](dadb, b.slot))
+          else pushSlot(Binary[A](dadb, b.slot, dadc, c.slot))
+        }
+      )
+    def lift2(f: (A,A) => A, df: (A,A) => (A,A), b: Reverse[A], c: Reverse[A]): Reverse[A] = { 
+      val (dadb, dadc) = df(b.primal, c.primal)
+      binary(f, dadb, dadc, b, c)
+    }
+      
+    def lift2_(f: (A,A) => A, df: (A,A,A) => (A,A), b: Reverse[A], c: Reverse[A]): Reverse[A] = {
+      val pb = b.primal
+      val pc = c.primal
+      val a = f(pb, pc)
+      val (dadb, dadc) = df(a, pb, pc)
+      binary((_,_) => a, dadb, dadc, b, c)
+    }
   }
 
-  def diffa[A:Numeric:Manifest](f: UU[A]) : A => (A, A) = (a: A) => {
+  def diffa[A:Numeric](f: UU[A]) = (a:A) => {
     val tape = new Tape[A]()
     implicit val mode : Mode[Reverse, A] = tape
     val x = tape.fresh(a)
@@ -106,3 +93,4 @@ object Reverse {
     (y.primal, ybar(x))
   }
 }
+

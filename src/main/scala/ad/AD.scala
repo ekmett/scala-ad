@@ -1,10 +1,13 @@
 package ad
 
+import scalaz._
+import scalaz.Scalaz._
+
 class AD[S[_], A](val guts: S[A])(implicit val mode: Mode[S, A]) { 
   def apply(f: S[A] => S[A]): AD[S, A] = AD(f(guts))
-  def +(that: AD[S, A])(implicit A: Numeric[A])    = AD(mode.plus(this.guts,that.guts))
-  def -(that: AD[S, A])(implicit A: Numeric[A])    = AD(mode.minus(this.guts,that.guts))
-  def *(that: AD[S, A])(implicit A: Numeric[A])    = AD(mode.times(this.guts,that.guts))
+  def +(that: AD[S, A])(implicit A: Numeric[A]) = AD(mode.plus(this.guts,that.guts))
+  def -(that: AD[S, A])(implicit A: Numeric[A]) = AD(mode.minus(this.guts,that.guts))
+  def *(that: AD[S, A])(implicit A: Numeric[A]) = AD(mode.times(this.guts,that.guts))
   def /(that: AD[S, A])(implicit A: Fractional[A]) = AD(mode.div(this.guts,that.guts))
 }
 
@@ -16,14 +19,14 @@ object AD {
     def plus(a: AD[S, A], b: AD[S, A]): AD[S, A] = AD(mode.plus(a.guts, b.guts))
     def minus(a: AD[S, A], b: AD[S, A]): AD[S, A] = AD(mode.minus(a.guts, b.guts))
     def times(a: AD[S, A], b: AD[S, A]): AD[S, A] = AD(mode.times(a.guts, b.guts))
-    def negate(a: AD[S, A]): AD[S, A] = AD(mode.negate(a.guts))
-    def fromInt(a: Int) = AD(mode.lift(A.fromInt(a)))
-    def toInt(a: AD[S, A]) = mode.toInt(a.guts) // derivative is 0 wherever defined, so this is grudgingly ok
-    def toLong(a: AD[S, A]) = mode.toLong(a.guts) // derivative is 0 wherever defined, so this is grudgingly ok
-    def toFloat(a: AD[S, A]): Nothing = error("I conscientiously object to giving you this result, despite the API")
-    def toDouble(a: AD[S, A]): Nothing = error("I conscientiously object to giving you this result, despite the API")
-    override def abs(a: AD[S, A]) = AD(mode.abs(a.guts))
-    override def signum(a: AD[S, A]) = mode.signum(a.guts)
+    def negate(a: AD[S, A]): AD[S, A] = a (mode negate _)
+    def fromInt(a: Int): AD[S, A] = AD(mode.lift(A.fromInt(a)))
+    def toInt(a: AD[S, A]): Int = mode.toInt(a.guts) // derivative is 0 wherever defined, so this is grudgingly ok
+    def toLong(a: AD[S, A]): Long = mode.toLong(a.guts) // derivative is 0 wherever defined, so this is grudgingly ok
+    def toFloat(a: AD[S, A]): Float = mode.toFloat(a.guts)
+    def toDouble(a: AD[S, A]): Double = mode.toDouble(a.guts)
+    override def abs(a: AD[S, A]): AD[S, A] = a (mode abs _)
+    override def signum(a: AD[S, A]): Int = mode.signum(a.guts)
   }
 
   implicit def ADIsNumeric[S[_],A](implicit mode: Mode[S, A], A: Numeric[A]) : Numeric[AD[S,A]] = new ADNumeric[S,A]()
@@ -50,5 +53,4 @@ object AD {
   }
 
   implicit def ADIsFloating[S[_], A](implicit mode: Mode[S, A], A: Floating[A]): Floating[AD[S, A]] = new ADFloating[S, A]()
-
 }

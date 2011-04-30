@@ -49,5 +49,6 @@ package object ad {
   // tests
   def test = diffa(new FF[Id,Id,Double] { def apply[S[_]](x: AD[S, Double])(implicit mode: Mode[S, Double]): AD[S, Double] = foo(x) })
   def test2 = diffa(new FF[Id,Id,Double] { def apply[S[_]](x: AD[S, Double])(implicit mode: Mode[S, Double]): AD[S, Double] = cos(foo(x)) })
+
 }
 
