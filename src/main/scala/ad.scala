@@ -19,8 +19,8 @@ package object ad {
 
   def grada[F[_]:Traverse, A:Numeric](f: FU[F, A]): F[A] => (A, F[A]) = error("TODO")
   def grad[F[_]:Traverse, A:Numeric](f: FU[F, A]): F[A] => F[A] = error("TODO")
-  def grads[F[_]:Traverse, A:Numeric](f: FU[F, A]): F[A] => Cofree_[F,A] = error("TODO")
-  def jacobians[F[_]:Traverse, G[_]:Functor, A:Numeric](f: FF[F, G, A]): F[A] => G[Cofree_[F,A]] = error("TODO")
+  def grads[F[_]:Traverse, A:Numeric](f: FU[F, A]): F[A] => Cofree[F,A] = error("TODO")
+  def jacobians[F[_]:Traverse, G[_]:Functor, A:Numeric](f: FF[F, G, A]): F[A] => G[Cofree[F,A]] = error("TODO")
   
   implicit def lift[S[_], A](a: A)(implicit mode: Mode[S, A], A: Numeric[A]): AD[S, A] = AD[S,A](mode.lift(a))
 
